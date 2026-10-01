@@ -1,0 +1,245 @@
+import common
+import std.map
+import std.math
+
+public fn benchHashMap(scale: Int) -> Int {
+    let n = 50000 * scale
+    let map: Map<Int, Int> = mapNew<Int, Int>()
+    for i in 0..<n {
+        mapSet(map, i, (i * 31) % 1000003)
+    }
+    let mut checksum = 0
+    let mut seed = 23
+    for _ in 0..<n * 4 {
+        seed = benchRandom(seed)
+        let key = seed % n
+        checksum = (checksum + mapGetOr(map, key, 0)) % 1000000007
+    }
+    return checksum + mapLen(map)
+}
+
+public fn benchVectorGrowth(scale: Int) -> Int {
+    let n = 1000000 * scale
+    let mut values: Vec<Int> = []
+    let mut checksum = 0
+    for i in 0..<n {
+        let value = i % 997
+        values.push(value)
+        checksum = (checksum + value) % 1000000007
+    }
+    return checksum + values.length
+}
+
+public fn benchVectorIteration(scale: Int) -> Int {
+    let n = 1000000 * scale
+    let mut values: Vec<Int> = Vec<Int>.withCapacity(n)
+    for i in 0..<n {
+        values.push(i % 1009)
+    }
+    let mut checksum = 0
+    for _ in 0..<8 {
+        for value in values {
+            checksum = (checksum + value) % 1000000007
+        }
+    }
+    return checksum
+}
+
+public fn benchKeyValueUpdate(scale: Int) -> Int {
+    let n = 20000 * scale
+    let map: Map<Int, Int> = mapNew<Int, Int>()
+    for i in 0..<n {
+        mapSet(map, i, i % 101)
+    }
+    for _ in 0..<20 {
+        for i in 0..<n {
+            mapSet(map, i, mapGetOr(map, i, 0) + 1)
+        }
+    }
+    let mut checksum = 0
+    for i in 0..<n {
+        checksum = (checksum + mapGetOr(map, i, 0)) % 1000000007
+    }
+    return checksum
+}
+
+// A third of the keys removed and reinserted each round, so every lookup after
+// the first round probes past removed buckets.
+public fn benchMixedMapRemoval(scale: Int) -> Int {
+    let n = 20000 * scale
+    let map: Map<Int, Int> = mapNew<Int, Int>()
+    for i in 0..<n {
+        mapSet(map, i, i % 101)
+    }
+    let mut checksum = 0
+    for round in 0..<10 {
+        for i in 0..<n {
+            if ((i + round) % 3 == 0 and mapRemove(map, i)) { checksum = (checksum + 1) % 1000000007 }
+        }
+        for i in 0..<n {
+            if ((i + round) % 3 == 0) { mapSet(map, i, (i + round) % 101) }
+        }
+    }
+    for i in 0..<n {
+        checksum = (checksum + mapGetOr(map, i, 0)) % 1000000007
+    }
+    return checksum
+}
+
+// `uint64_t` words and a hardware population count, as C++'s
+// `__builtin_popcountll` and Rust's `count_ones`. This arm used signed `I64`
+// words, masked the arithmetic shift to rotate, and counted with a hand-written
+// SWAR popcount, because Prismio had neither the unsigned shift in the right
+// type nor `countOnes`.
+public fn benchFlatBitset(scale: Int) -> Int {
+    let n = 50000 * scale
+    let words = (n + 63) / 64
+
+    let mut a = Vec<U64>.filled(words, 0)
+    let mut b = Vec<U64>.filled(words, 0)
+    let mut c = Vec<U64>.filled(words, 0)
+
+    let one: U64 = 1
+    let mut seed = 77
+    for i in 0..<n {
+        seed = benchRandom(seed)
+        let wIdx = i / 64
+        let bIdx = (i % 64) as U64
+        if (seed % 3 == 0) {
+            a[wIdx] = a[wIdx] | (one << bIdx)
+        }
+        seed = benchRandom(seed)
+        if (seed % 5 == 0) {
+            b[wIdx] = b[wIdx] | (one << bIdx)
+        }
+    }
+
+    let magic: U64 = 0x0137_F026_8594_B374
+    for _ in 0..<10 {
+        for w in 0..<words {
+            let aw = a[w]
+            let bw = b[w]
+            let cw = (aw & bw) | ((~aw) & (bw ^ magic))
+            c[w] = cw
+            a[w] = aw ^ cw
+            b[w] = (bw << (1 as U64)) | (bw >> (63 as U64))
+        }
+    }
+
+    let mut countA: I64 = 0
+    let mut countB: I64 = 0
+    let mut countC: I64 = 0
+    for w in 0..<words {
+        countA = countA + (a[w].countOnes() as I64)
+        countB = countB + (b[w].countOnes() as I64)
+        countC = countC + (c[w].countOnes() as I64)
+    }
+
+    let checksum = (countA * 10007 + countB * 31 + countC) % 1000000007
+    return checksum as Int
+}
+
+public fn benchTrieSearch(scale: Int) -> Int {
+    let numKeys = 8000 * scale
+    let numQueries = 15000 * scale
+
+    let mut c0: Vec<Int> = []
+    let mut c1: Vec<Int> = []
+    let mut c2: Vec<Int> = []
+    let mut c3: Vec<Int> = []
+    let mut counts: Vec<Int> = []
+
+    c0.push(-1)
+    c1.push(-1)
+    c2.push(-1)
+    c3.push(-1)
+    counts.push(0)
+
+    let mut seed = 53
+    for _ in 0..<numKeys {
+        seed = benchRandom(seed)
+        let len = 6 + (seed % 10)
+        let mut curr = 0
+        for _ in 0..<len {
+            seed = benchRandom(seed)
+            let branch = seed % 4
+            let mut nextNode = -1
+            if (branch == 0) {
+                if (c0[curr] == -1) {
+                    let newIdx = c0.length
+                    c0.push(-1)
+                    c1.push(-1)
+                    c2.push(-1)
+                    c3.push(-1)
+                    counts.push(0)
+                    c0[curr] = newIdx
+                }
+                nextNode = c0[curr]
+            } else if (branch == 1) {
+                if (c1[curr] == -1) {
+                    let newIdx = c0.length
+                    c0.push(-1)
+                    c1.push(-1)
+                    c2.push(-1)
+                    c3.push(-1)
+                    counts.push(0)
+                    c1[curr] = newIdx
+                }
+                nextNode = c1[curr]
+            } else if (branch == 2) {
+                if (c2[curr] == -1) {
+                    let newIdx = c0.length
+                    c0.push(-1)
+                    c1.push(-1)
+                    c2.push(-1)
+                    c3.push(-1)
+                    counts.push(0)
+                    c2[curr] = newIdx
+                }
+                nextNode = c2[curr]
+            } else {
+                if (c3[curr] == -1) {
+                    let newIdx = c0.length
+                    c0.push(-1)
+                    c1.push(-1)
+                    c2.push(-1)
+                    c3.push(-1)
+                    counts.push(0)
+                    c3[curr] = newIdx
+                }
+                nextNode = c3[curr]
+            }
+            curr = nextNode
+        }
+        counts[curr] = counts[curr] + 1
+    }
+
+    let mut checksum = 0
+    let mut qSeed = 101
+    for _ in 0..<numQueries {
+        qSeed = benchRandom(qSeed)
+        let qLen = 3 + (qSeed % 8)
+        let mut curr = 0
+        let mut found = true
+        for _ in 0..<qLen {
+            qSeed = benchRandom(qSeed)
+            let branch = qSeed % 4
+            let mut nextNode = -1
+            if (branch == 0) { nextNode = c0[curr] }
+            else if (branch == 1) { nextNode = c1[curr] }
+            else if (branch == 2) { nextNode = c2[curr] }
+            else { nextNode = c3[curr] }
+
+            if (nextNode == -1) {
+                found = false
+                break
+            }
+            curr = nextNode
+        }
+        if (found) {
+            checksum = (checksum + curr * 31 + counts[curr] + 1) % 1000000007
+        }
+    }
+
+    return checksum
+}
