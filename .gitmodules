@@ -1124,6 +1124,9 @@
 [submodule "vendor/grammars/praatvscode"]
 	path = vendor/grammars/praatvscode
 	url = https://github.com/orhunulusahin/praatvscode.git
+[submodule "vendor/grammars/prismio-tmlanguage"]
+	path = vendor/grammars/prismio-tmlanguage
+	url = https://github.com/prismio-lang/prismio-tmlanguage
 [submodule "vendor/grammars/processing.tmbundle"]
 	path = vendor/grammars/processing.tmbundle
 	url = https://github.com/textmate/processing.tmbundle

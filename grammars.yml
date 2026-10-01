@@ -1036,6 +1036,8 @@ vendor/grammars/powershell:
 vendor/grammars/praatvscode:
 - source.praat
 - source.textgrid
+vendor/grammars/prismio-tmlanguage:
+- source.prismio
 vendor/grammars/processing.tmbundle:
 - source.processing
 vendor/grammars/python-django.tmbundle:

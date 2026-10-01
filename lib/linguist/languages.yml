@@ -6205,6 +6205,14 @@ Prisma:
   tm_scope: source.prisma
   ace_mode: prisma
   language_id: 499933428
+Prismio:
+  type: programming
+  color: "#7c5cff"
+  extensions:
+  - ".psm"
+  tm_scope: source.prismio
+  ace_mode: text
+  language_id: 201780061
 Pro*C:
   fs_name: ProC
   color: "#bb8368"
